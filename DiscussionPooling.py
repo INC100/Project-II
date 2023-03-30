@@ -9,7 +9,7 @@ from skimage.measure import compare_ssim as ssim_fn
 from skimage.measure import compare_psnr as psnr_fn
 import torch
 import tqdm
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 device = 'cuda:0'
 
@@ -35,7 +35,7 @@ pd_op = torch.optim.Adam(lr= 0.0002, params= p_d.parameters(), eps= 1e-5)
 """
 损失权重
 """
-lama = lamkl = lamreg = lamg =1; lamd = 0.01
+lama = lamkl = lamreg = lamg =1;
 lamp2 = 1; lamp1 = lamm = 0.5
 
 epoches = 200
@@ -55,14 +55,7 @@ for epoch in range(1, epoches + 1):
         train_nums = train_nums + batch
         ##########################################训练Generator##########################################
         g_op.zero_grad()
-        fakemrs, fakepet1, fakepet2, L_reg, L_kl, p_d1, p_d2, m_d1, m_d2, m_c1 = g(mrimgs, petimgs)
-
-        with torch.no_grad():
-            errormap = torch.nn.L1Loss(size_average=False, reduce=False)(fakepet2, petimgs)
-            errormap_d1 = torch.nn.AvgPool3d(2)(errormap)
-            errormap_c1 = torch.nn.functional.grid_sample(input = errormap, grid = m_c1)
-            errormap_d2 = torch.nn.AvgPool3d(2)(errormap_c1)
-
+        fakemrs, fakepet1, fakepet2, L_reg, L_kl = g(mrimgs, petimgs)
 
         dis_fakemrs = m_d(fakemrs)
         dis_fakepet1 = p_d(fakepet1)
@@ -77,13 +70,7 @@ for epoch in range(1, epoches + 1):
         mae_pet2 = torch.nn.L1Loss(size_average=True)(petimgs, fakepet2)
         L_g = mae_mr * lamm + mae_pet1 * lamp1 + mae_pet2 * lamp2
 
-        mr_d1_loss = torch.nn.L1Loss(size_average=True, reduction='mean')(errormap_d1, m_d1)
-        mr_d2_loss = torch.nn.L1Loss(size_average=True, reduction='mean')(errormap_d2, m_d2)
-        pet_d1_loss = torch.nn.L1Loss(size_average=True, reduction='mean')(errormap_d1, p_d1)
-        pet_d2_loss = torch.nn.L1Loss(size_average=True, reduction='mean')(errormap_d2, p_d2)
-        L_d = mr_d1_loss + mr_d2_loss + pet_d1_loss + pet_d2_loss
-
-        g_loss = L_adv * lama + L_kl * lamkl + L_reg * lamreg + L_g * lamg + L_d * lamd
+        g_loss = L_adv * lama + L_kl * lamkl + L_reg * lamreg + L_g * lamg
         g_loss.backward()
         g_op.step()
 
@@ -92,7 +79,7 @@ for epoch in range(1, epoches + 1):
         md_op.zero_grad()
         pd_op.zero_grad()
         with torch.no_grad():
-            fakemrs, fakepet1, fakepet2, L_reg, L_kl, p_d1, p_d2, m_d1, m_d2, m_c1 = g(mrimgs, petimgs)
+            fakemrs, fakepet1, fakepet2, L_reg, L_kl = g(mrimgs, petimgs)
         dis_realmrs = m_d(mrimgs)
         dis_fakemrs = m_d(fakemrs)
         dis_realpet = p_d(petimgs)
@@ -152,7 +139,7 @@ for epoch in range(1, epoches + 1):
             test_nums = test_nums + batch
             ##########################################计算Metrics##########################################
             with torch.no_grad():
-                fakemrs, fakepet1, fakepet2, L_reg, L_kl, p_d1, p_d2, m_d1, m_d2, m_c1 = g(mrimgs, petimgs)
+                fakemrs, fakepet1, fakepet2, L_reg, L_kl = g(mrimgs, petimgs)
                 mae_mr = torch.nn.L1Loss(size_average=True)(mrimgs, fakemrs)
                 mae_pet1 = torch.nn.L1Loss(size_average=True)(petimgs, fakepet1)
                 mae_pet2 = torch.nn.L1Loss(size_average=True)(petimgs, fakepet2)

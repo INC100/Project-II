@@ -581,10 +581,8 @@ class Variant_pooling(torch.nn.Module):
         return module
 
     def forward(self, mrimg, petimg):
-        mr_feature, mr_d1, mr_c1 = self.sh_enc_1(mrimg)
-        mr_feature, mr_d2, mr_c2 = self.sh_enc_2(mr_feature)
-        pet_feature, pet_d1, pet_c1 = self.sh_enc_1(petimg)
-        pet_feature, pet_d2, pet_c2 = self.sh_enc_2(pet_feature)
+        mr_feature = self.sh_enc(mrimg)
+        pet_feature = self.sh_enc(petimg)
 
         """
         搭建BXGAN主干运行流程
@@ -640,4 +638,4 @@ class Variant_pooling(torch.nn.Module):
         loss_std3 = torch.nn.MSELoss(size_average=True)(r_std3, p_std3)
         reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
 
-        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1
+        return Im, Ip1, Ip2, reg_loss, kl_loss
