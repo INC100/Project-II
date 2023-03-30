@@ -11,7 +11,7 @@ import shutil
 data = pd.read_excel('./Data/ADNI全.xlsx')
 data = data.values
 subject_id = data[:,3]
-subject_group = data[:,-2]
+subject_group = data[:,-1]
 
 #依据subject_id和subject_group，将Data内的数据分为ADNI1和ADNI2
 #ADNI1
