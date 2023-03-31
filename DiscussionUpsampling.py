@@ -9,12 +9,11 @@ from skimage.measure import compare_ssim as ssim_fn
 from skimage.measure import compare_psnr as psnr_fn
 import torch
 import tqdm
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 device = 'cuda:0'
 
-matrix_size = 1
-cuda_matrix = torch.tensor(torch.rand(size=(matrix_size, matrix_size, matrix_size),device=device))
 
 stage = 'ADNI1'
 trainstage, teststage = ('ADNI1', 'ADNI2') if stage == 'ADNI1' else ('ADNI2', 'ADNI1')
