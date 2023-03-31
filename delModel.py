@@ -3,8 +3,6 @@
 """
 
 import os
-import sys
-import shutil
 
 #分别检查Discussion和Models文件夹是否存在
 #搜索存在的文件夹下的所有文件
