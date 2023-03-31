@@ -9,7 +9,7 @@ from skimage.measure import compare_ssim as ssim_fn
 from skimage.measure import compare_psnr as psnr_fn
 import torch
 import tqdm
-os.environ['CUDA_VISIBLE_DEVICES'] = '5'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 device = 'cuda:0'
 
@@ -21,11 +21,11 @@ trainstage, teststage = ('ADNI1', 'ADNI2') if stage == 'ADNI1' else ('ADNI2', 'A
 traindataset = DataLoader(MRPETDATASET(ADNI=trainstage), batch_size=1, shuffle=True, drop_last= False)
 testdataset = DataLoader(MRPETDATASET(ADNI=teststage), batch_size=1, shuffle=True, drop_last= False)
 
-g = Variant_pooling(pooling_operation='maxpooling').to(device) #pooling_operation应在['maxpooling', 'avgpooling','convstride']
+g = Variant_pooling(pooling_operation='convstride').to(device) #pooling_operation应在['maxpooling', 'avgpooling','convstride']
 m_d = Discriminator().to(device)
 p_d = Discriminator().to(device)
 
-filepath = './Discussion/Pooling/maxpooling/'+trainstage+'/'
+filepath = './Discussion/Pooling/convstride/'+trainstage+'/'
 if not os.path.exists(filepath): os.makedirs(filepath)
 
 g.load_state_dict(torch.load(filepath + 'TransGenerator_5.pth'))
