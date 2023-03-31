@@ -26,9 +26,9 @@ p_d = Discriminator().to(device)
 filepath = './Models/Fidelity GAN/'+trainstage+'/'
 if not os.path.exists(filepath): os.makedirs(filepath)
 
-g.load_state_dict(torch.load(filepath + 'TransGenerator_5.pth'))
-m_d.load_state_dict(torch.load(filepath + 'MrDiscriminator_5.pth'))
-p_d.load_state_dict(torch.load(filepath + 'PetDiscriminator_5.pth'))
+g.load_state_dict(torch.load(filepath + 'TransGenerator_12.pth'))
+m_d.load_state_dict(torch.load(filepath + 'MrDiscriminator_12.pth'))
+p_d.load_state_dict(torch.load(filepath + 'PetDiscriminator_12.pth'))
 
 g_op = torch.optim.Adam(lr= 0.0002, params= g.parameters(), eps= 1e-5)
 md_op = torch.optim.Adam(lr= 0.0002, params= m_d.parameters(), eps= 1e-5)
@@ -41,7 +41,7 @@ lama = lamkl = lamreg = lamg =1; lamd = 0.01
 lamp2 = 1; lamp1 = lamm = 0.5
 
 epoches = 200
-for epoch in range(6, epoches + 1):
+for epoch in range(13, epoches + 1):
     trainpbar = tqdm.tqdm(total= len(traindataset))
     train_mr_mae = 0; train_mr_ssim = 0; train_mr_psnr = 0;
     train_p1_mae = 0; train_p1_ssim = 0; train_p1_psnr = 0;

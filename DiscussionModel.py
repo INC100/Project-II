@@ -524,21 +524,31 @@ class Variant_pooling(torch.nn.Module):
         super(Variant_pooling, self).__init__()
         self.sh_enc = torch.nn.Sequential(
             self.cksn(infilters=1, outfilters=4 * Generator_filters, k_size=3, name='shenc_1'),
-            self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_2')
+            # self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_2')
         )
 
         if pooling_operation == 'maxpooling':
+            self.sh_enc.add_module('conv1', self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_3'))
             self.sh_enc.add_module('maxpooling-1', torch.nn.MaxPool3d(kernel_size=2, stride=2))
-            self.sh_enc.add_module('conv', self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_3'))
+            self.sh_enc.add_module('conv2', self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_4'))
             self.sh_enc.add_module('maxpooling-2', torch.nn.MaxPool3d(kernel_size=2, stride=2))
         elif pooling_operation == 'avgpooling':
+            self.sh_enc.add_module('conv1', self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_3'))
             self.sh_enc.add_module('avgpooling-1', torch.nn.AvgPool3d(kernel_size=2, stride=2))
-            self.sh_enc.add_module('conv', self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_3'))
+            self.sh_enc.add_module('conv2', self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_4'))
             self.sh_enc.add_module('avgpooling-2', torch.nn.AvgPool3d(kernel_size=2, stride=2))
         elif pooling_operation == 'convstride':
-            self.sh_enc.add_module('conv', self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_3', stride=2, padding_mode= 'valid'))
-            self.sh_enc.add_module('convstride', self.cksn(infilters=16 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_4', stride=2, padding_mode= 'valid'))
-        
+            self.sh_enc.add_module('conv1', module= torch.nn.Sequential(
+                torch.nn.Conv3d(in_channels=4 * Generator_filters, out_channels=8 * Generator_filters, kernel_size=3, stride=2, padding=1),
+                torch.nn.InstanceNorm3d(16 * Generator_filters),
+                torch.nn.ReLU()
+            ))
+            self.sh_enc.add_module('conv2', module= torch.nn.Sequential(
+                torch.nn.Conv3d(in_channels=8 * Generator_filters, out_channels=16 * Generator_filters, kernel_size=3, stride=2, padding=1),
+                torch.nn.InstanceNorm3d(16 * Generator_filters),
+                torch.nn.ReLU()
+            ))
+
           
 
 
