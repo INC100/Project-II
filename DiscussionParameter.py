@@ -8,7 +8,7 @@ from skimage.measure import compare_ssim as ssim_fn
 from skimage.measure import compare_psnr as psnr_fn
 import torch
 import tqdm
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 device = 'cuda:0'
 
@@ -17,10 +17,10 @@ trainstage, teststage = ('ADNI1', 'ADNI2') if stage == 'ADNI1' else ('ADNI2', 'A
 traindataset = DataLoader(MRPETDATASET(ADNI=trainstage), batch_size=1, shuffle=True, drop_last= False)
 testdataset = DataLoader(MRPETDATASET(ADNI=teststage), batch_size=1, shuffle=True, drop_last= False)
 
-g = Variant_Parameter(sigma_U=3).to(device)
+g = Variant_Parameter(sigma_U=7).to(device)
 m_d = Discriminator().to(device)
 p_d = Discriminator().to(device)
-filepath = './Discussion/Parameter/sigma_U/3/'+trainstage+'/'
+filepath = './Discussion/Parameter/sigma_U/7/'+trainstage+'/'
 if not os.path.exists(filepath): os.makedirs(filepath)
 
 g_op = torch.optim.Adam(lr= 0.0002, params= g.parameters(), eps= 1e-5)
