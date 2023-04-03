@@ -649,3 +649,115 @@ class Variant_pooling(torch.nn.Module):
         reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
 
         return Im, Ip1, Ip2, reg_loss, kl_loss
+
+class Variant_Parameter(torch.nn.Module):
+    def __init__(self, sigma_U = 5, sigma_D = 5):
+        super(Variant_Parameter, self).__init__()
+        self.sh_enc_1 = torch.nn.Sequential(
+            self.cksn(infilters=1, outfilters=4 * Generator_filters, k_size=3, name='shenc_1'),
+            self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_2'),
+            Def_DownSampling(filters= 8 * Generator_filters, neigbor=sigma_D)
+        )
+        self.sh_enc_2 = torch.nn.Sequential(
+            self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_3'),
+            Def_DownSampling(filters= 16 * Generator_filters, neigbor=sigma_D)
+        )
+
+        self.sh_rsb1 = skiplayer(infilters=16 * Generator_filters)
+        self.sh_rsb2 = skiplayer(infilters=16 * Generator_filters)
+        self.sh_rsb3 = skiplayer(infilters=16 * Generator_filters)
+        self.tran_1 = Transfer(inputshape=(16 * Generator_filters, 44, 36, 36))
+        self.tran_2 = Transfer(inputshape=(16 * Generator_filters, 44, 36, 36))
+        self.tran_3 = Transfer(inputshape=(16 * Generator_filters, 44, 36, 36))
+
+        self.mr_dec = torch.nn.Sequential(
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            self.cksn(infilters=16 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='mrdecoder_1'),
+            QKV_Upsampling(filters= 8 * Generator_filters, upscale=2, neighbor=sigma_U),
+            self.cksn(infilters=8 * Generator_filters, outfilters=4 * Generator_filters, k_size=3, name='mrdecoder_2'),
+            QKV_Upsampling(filters=4 * Generator_filters, upscale=2, neighbor=sigma_U),
+            torch.nn.Conv3d(in_channels=4 * Generator_filters, out_channels=1, kernel_size=7, padding='same')
+        )
+        self.pet_dec = torch.nn.Sequential(
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            self.cksn(infilters=16 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='petdecoder_1'),
+            QKV_Upsampling(filters= 8 * Generator_filters, upscale=2, neighbor=sigma_U),
+            self.cksn(infilters=8 * Generator_filters, outfilters=4 * Generator_filters, k_size=3, name='petdecoder_2'),
+            QKV_Upsampling(filters=4 * Generator_filters, upscale=2, neighbor=sigma_U),
+            torch.nn.Conv3d(in_channels=4 * Generator_filters, out_channels=1, kernel_size=7, padding='same')
+        )
+
+
+    def cksn(input, infilters, outfilters, k_size, name=None):
+        module = torch.nn.Sequential()
+        module.add_module(name=name + 'conv3D', module=torch.nn.Conv3d(in_channels=infilters, out_channels=outfilters,
+                                                                       kernel_size=k_size, stride=1, padding='same'))
+        module.add_module(name=name + 'IN', module=torch.nn.InstanceNorm3d(num_features=outfilters))
+        module.add_module(name=name + 'activation', module=torch.nn.ReLU())
+        return module
+
+    def forward(self, mrimg, petimg):
+        mr_feature, mr_d1, mr_c1 = self.sh_enc_1(mrimg)
+        mr_feature, mr_d2, mr_c2 = self.sh_enc_2(mr_feature)
+        pet_feature, pet_d1, pet_c1 = self.sh_enc_1(petimg)
+        pet_feature, pet_d2, pet_c2 = self.sh_enc_2(pet_feature)
+
+        """
+        搭建BXGAN主干运行流程
+        shared_encoder->skiplayers->decoder
+        """
+        feature_mr_1 = self.sh_rsb1(mr_feature)
+        feature_mr_2 = self.sh_rsb2(feature_mr_1)
+        feature_mr_3 = self.sh_rsb3(feature_mr_2)
+        feature_pet_1 = self.sh_rsb1(pet_feature)
+        feature_pet_2 = self.sh_rsb2(feature_pet_1)
+        feature_pet_3 = self.sh_rsb3(feature_pet_2)
+        Ip1 = self.pet_dec(feature_pet_3)
+        Im = self.mr_dec(feature_mr_3)
+
+        """
+        BXGANのtransfer流程
+        transer->skiplayer->avg->decoder
+        kl_loss对特征进行分布约束
+        """
+        rmr_to_pet1, p_mean1, p_std1 = self.tran_1(feature_mr_1)
+        kl_1 = kl_div(torch.log_softmax(torch.nn.Flatten()(rmr_to_pet1), dim=1),
+                      torch.nn.Softmax()(torch.nn.Flatten()(feature_pet_1)), size_average=True)
+        mr_to_pet1 = self.sh_rsb2(rmr_to_pet1)
+        mr_to_pet1 = self.sh_rsb3(mr_to_pet1)
+        rmr_to_pet2, p_mean2, p_std2 = self.tran_2(feature_mr_2)
+        kl_2 = kl_div(torch.log_softmax(torch.nn.Flatten()(rmr_to_pet2), dim=1),
+                      torch.nn.Softmax()(torch.nn.Flatten()(feature_pet_2)), size_average=True)
+        mr_to_pet2 = self.sh_rsb3(rmr_to_pet2)
+        rmr_to_pet3, p_mean3, p_std3 = self.tran_3(feature_mr_3)
+        kl_3 = kl_div(torch.log_softmax(torch.nn.Flatten()(rmr_to_pet3), dim=1),
+                      torch.nn.Softmax()(torch.nn.Flatten()(feature_pet_3)), size_average=True)
+        mr_to_pet = (mr_to_pet1 + mr_to_pet2 + rmr_to_pet3) / 3.0
+        Ip2 = self.pet_dec(mr_to_pet)
+
+        """
+        BXGANのloss
+        1. 图像的mae_loss, 在主文件实现
+        2. 特征的kl_loss, 在上面实现
+        3. 均值标准差的reg_loss, 在下面实现
+        """
+        kl_loss = kl_1 + kl_2 + kl_3
+        r_mean1, r_std1 = torch.mean(feature_pet_1, dim=[2, 3, 4], keepdim=True), torch.std(feature_pet_1,
+                                                                                            dim=[2, 3, 4], keepdim=True)
+        r_mean2, r_std2 = torch.mean(feature_pet_2, dim=[2, 3, 4], keepdim=True), torch.std(feature_pet_2,
+                                                                                            dim=[2, 3, 4], keepdim=True)
+        r_mean3, r_std3 = torch.mean(feature_pet_3, dim=[2, 3, 4], keepdim=True), torch.std(feature_pet_3,
+                                                                                            dim=[2, 3, 4], keepdim=True)
+        loss_mean1 = torch.nn.MSELoss(size_average=True)(r_mean1, p_mean1)
+        loss_mean2 = torch.nn.MSELoss(size_average=True)(r_mean2, p_mean2)
+        loss_mean3 = torch.nn.MSELoss(size_average=True)(r_mean3, p_mean3)
+        loss_std1 = torch.nn.MSELoss(size_average=True)(r_std1, p_std1)
+        loss_std2 = torch.nn.MSELoss(size_average=True)(r_std2, p_std2)
+        loss_std3 = torch.nn.MSELoss(size_average=True)(r_std3, p_std3)
+        reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
+
+        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1
