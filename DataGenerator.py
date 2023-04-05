@@ -31,6 +31,21 @@ class MRPETDATASET(Dataset):
 
         return subject_id, mr_img, pet_img
     
+class VisualDataset(Dataset):
+    def __init__(self, ADNI = 'ADNI1', subjectid=[57]):
+        self.train_stage = ADNI
+        self.subject_id = subjectid
+
+    def __len__(self):
+        return len(self.subject_id)
+
+    def __getitem__(self, item):
+        id = self.subject_id[item]
+        mr_path = './Data/' + self.train_stage +'/'+str(id)+'/MRI.mat'
+        pet_path = './Data/' + self.train_stage +'/'+str(id) + '/PET.mat'
+        pet_img = np.expand_dims(np.nan_to_num(np.swapaxes(sio.loadmat(pet_path)['img'], 0, 1,)) * 255.0, axis = 0).astype(np.float32)
+        mr_img = np.expand_dims(np.nan_to_num(np.swapaxes(sio.loadmat(mr_path)['img'], 0, 1,)) * 255.0, axis = 0).astype(np.float32)
+        return id,mr_img, pet_img
 
 def tensor_to_numpy(x):
     return x.cpu().detach().numpy()
