@@ -413,4 +413,4 @@ class TransGenerator(torch.nn.Module):
         loss_std3 = torch.nn.MSELoss(size_average=True)(r_std3, p_std3)
         reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
 
-        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1
+        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1, mr_to_pet
