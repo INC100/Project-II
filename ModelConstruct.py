@@ -157,7 +157,7 @@ class QKV_Upsampling(torch.nn.Module):
         qkv_neighbor = torch.ones(size=(c, 1, self.neighbor, self.neighbor, self.neighbor), dtype=torch.float, device=x.device, requires_grad=False)
         qkv = torch.nn.functional.conv3d(qkv, qkv_neighbor, padding='same', groups=c) / (self.neighbor ** 3)
 
-        return qkv
+        return qkv, qk
 
 class Def_DownSampling(torch.nn.Module):
     def __init__(self, filters, neigbor):
