@@ -252,6 +252,50 @@ def pixelshuffle():
                 bbox_inches='tight', pad_inches=0)
     plt.close()
 
+def ACE():
+    g = TransGenerator().to(device)
+    filepath = './Models/Fidelity GAN/' + trainstage + '/'
+    g.load_state_dict(torch.load(filepath + 'TransGenerator_120.pth'))
+    imagepath = './imageshow/Upsampling/ACE/' + trainstage + '/'
+    if not os.path.exists(imagepath): os.makedirs(imagepath)
+
+    fakemrs, fakepet1, fakepet2, L_reg, L_kl, p_d1, p_d2, m_d1, m_d2, m_c1, mr2pet = g(mrimgs, petimgs)
+    feature_extractor = torch.nn.Sequential(*list(g.pet_dec.children())[:6])
+    l_features = feature_extractor(mr2pet)
+    h_features = g.pet_dec[6](l_features)
+
+    # 保存fakepet2
+    plt.imshow(tensor_to_numpy(fakepet2)[0, 0, :, 70, :], cmap='gray')
+    plt.axis('off')
+    plt.savefig(imagepath + str(subjectid) + '_fakepet2.png',
+                bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    # 验证l_feature的哪个位置会被采样到h_feature
+    plt.imshow(tensor_to_numpy(l_features)[0, 3, :, 35, :], cmap='gray')
+    for i in range(43, 49):
+        for j in range(30, 41):
+            location_matrix = torch.zeros_like(l_features, device=device)
+            location_matrix[:, :, i, 35, j] = 1
+            fake_h = g.pet_dec[6](location_matrix)
+            if fake_h[0, 0, 88, 70, 72] > 0.1:
+                print(i, j, fake_h[0, 0, 88, 70, 72])
+                # plt.gca().add_patch(plt.Circle((j, i), 1, color='red', fill=False, linewidth=1))
+                plt.scatter(j, i, c='r', s=1)
+            else:
+                print(i, j)
+    plt.axis('off')
+    plt.savefig(imagepath + str(subjectid) + '_l.png', bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+    # 在h_feature位置画圈
+    plt.imshow(tensor_to_numpy(h_features)[0, 0, :, 70, :], cmap='gray')
+    plt.gca().add_patch(plt.Circle((72, 88), 1, color='red', fill=False, linewidth=1))
+    plt.axis('off')
+    plt.savefig(imagepath + str(subjectid) + '_h.png',
+                bbox_inches='tight', pad_inches=0)
+    plt.close()
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 device = 'cuda:0'
@@ -270,17 +314,5 @@ with torch.no_grad():
         #mode==['maxpooling', 'avgpooling','convstride', 'TAP']中
         # tranditional_pooling(mode='TAP')
 
-        g = TransGenerator().to(device)
-        filepath = './Models/Fidelity GAN/' + trainstage + '/'
-        g.load_state_dict(torch.load(filepath + 'TransGenerator_120.pth'))
-        imagepath = './imageshow/Upsampling/TAP/' + trainstage + '/'
-        if not os.path.exists(imagepath): os.makedirs(imagepath)
-
-        fakemrs, fakepet1, fakepet2, L_reg, L_kl, p_d1, p_d2, m_d1, m_d2, m_c1, mr2pet = g(mrimgs, petimgs)
-        feature_extractor = torch.nn.Sequential(*list(g.pet_dec.children())[:6])
-        l_features = feature_extractor(mr2pet)
-        h_features = g.pet_dec[6](l_features)
-
-        print(l_features.shape, h_features.shape)
 
         break
