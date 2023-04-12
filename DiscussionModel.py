@@ -512,7 +512,7 @@ class Variant_Upsampling(torch.nn.Module):
         loss_std3 = torch.nn.MSELoss(size_average=True)(r_std3, p_std3)
         reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
 
-        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1, mr_to_pet
+        return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1
 
 class Variant_pooling(torch.nn.Module):
     def __init__(self, pooling_operation):
@@ -761,3 +761,47 @@ class Variant_Parameter(torch.nn.Module):
         reg_loss = loss_mean1 + loss_mean2 + loss_mean3 + loss_std1 + loss_std2 + loss_std3
 
         return Im, Ip1, Ip2, reg_loss, kl_loss, pet_d1, pet_d2, mr_d1, mr_d2, mr_c1
+
+
+class Variant_Direct(torch.nn.Module):
+    def __init__(self):
+        super(Variant_Direct, self).__init__()
+        self.enc_1 = torch.nn.Sequential(
+            self.cksn(infilters=1, outfilters=4 * Generator_filters, k_size=3, name='shenc_1'),
+            self.cksn(infilters=4 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='shenc_2'),
+            Def_DownSampling(filters= 8 * Generator_filters, neigbor=5)
+        )
+        self.enc_2 = torch.nn.Sequential(
+            self.cksn(infilters=8 * Generator_filters, outfilters=16 * Generator_filters, k_size=3, name='shenc_3'),
+            Def_DownSampling(filters= 16 * Generator_filters, neigbor=5)
+        )
+
+        self.pet_dec = torch.nn.Sequential(
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            skiplayer(infilters=16 * Generator_filters),
+            self.cksn(infilters=16 * Generator_filters, outfilters=8 * Generator_filters, k_size=3, name='petdecoder_1'),
+            QKV_Upsampling(filters= 8 * Generator_filters, upscale=2, neighbor=5),
+            self.cksn(infilters=8 * Generator_filters, outfilters=4 * Generator_filters, k_size=3, name='petdecoder_2'),
+            QKV_Upsampling(filters=4 * Generator_filters, upscale=2, neighbor=5),
+            torch.nn.Conv3d(in_channels=4 * Generator_filters, out_channels=1, kernel_size=7, padding='same')
+        )
+
+    def cksn(input, infilters, outfilters, k_size, name=None):
+        module = torch.nn.Sequential()
+        module.add_module(name=name + 'conv3D', module=torch.nn.Conv3d(in_channels=infilters, out_channels=outfilters,
+                                                                       kernel_size=k_size, stride=1, padding='same'))
+        module.add_module(name=name + 'IN', module=torch.nn.InstanceNorm3d(num_features=outfilters))
+        module.add_module(name=name + 'activation', module=torch.nn.ReLU())
+        return module
+
+    def forward(self, mrimg):
+        mr_feature, mr_d1, mr_c1 = self.enc_1(mrimg)
+        mr_feature, mr_d2, mr_c2 = self.enc_2(mr_feature)
+
+        Ip1 = self.pet_dec(mr_feature)
+
+        return Ip1, mr_d1, mr_d2, mr_c1
