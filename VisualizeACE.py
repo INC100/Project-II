@@ -28,7 +28,7 @@ with torch.no_grad():
 
         g = TransGenerator().to(device)
         filepath = './Models/Fidelity GAN/' + trainstage + '/'
-        g.load_state_dict(torch.load(filepath + 'TransGenerator_120.pth'))
+        g.load_state_dict(torch.load(filepath + 'TransGenerator_155.pth'))
         imagepath = './imageshow/Upsampling/ACE/' + trainstage + '/'
         if not os.path.exists(imagepath): os.makedirs(imagepath)
 
@@ -50,43 +50,49 @@ with torch.no_grad():
         l_features, semantic_matrix = g.pet_dec[4](l_features)
         h_features, semantic_matrix = torch.nn.Sequential(*list(g.pet_dec.children())[5:7])(l_features)
 
+        slice = 70
+
         semantic_matrix = torch.swapaxes(semantic_matrix, 1, 4)
-        semantic_matrix = tensor_to_numpy(semantic_matrix)[0, :, :, 70, :, 0]
+        semantic_matrix = tensor_to_numpy(semantic_matrix)[0, :, slice, :, :, 0]
         semantic_matrix = np.reshape(semantic_matrix, (semantic_matrix.shape[0], -1))
         semantic_matrix = np.transpose(semantic_matrix)
 
-        template = sio.loadmat('./DataTrace/538_aal.mat')['img'][:, 70, :]
+        template = sio.loadmat('./DataTrace/538_aal.mat')['img'][slice, :, :]
+
+        nclusters = 0
+        for k in np.unique(template):
+            if np.sum(template == k)< 100:
+                template[template == k] = 0
+            else:
+                nclusters += 1
 
         #使用sci-kit learn中的kmeans聚类将semantic_matrix聚类为90类
-        kmeans = KMeans(n_clusters=len(np.unique(template)), random_state=0).fit(semantic_matrix)
+        kmeans = KMeans(n_clusters=nclusters, random_state=0).fit(semantic_matrix)
         labels = kmeans.labels_
-        labels = np.reshape(labels, (176, 144))
+        labels = np.reshape(labels, (144, 144))
 
-
-        #计算template中37, 38, 41, 42, 77, 78类别位置对应的labels中的类别信息
-        # x_location, y_location = np.where((template == 37) | (template == 38) | (template == 41) | (template == 42) | (template == 77) | (template == 78))
-
-        # plt.imshow(tensor_to_numpy(h_features[0, 0, :, 70, :]), cmap='gray')
-        # for i in range(1, 91):
-        #     x_location, y_location = np.where((template == i))
-        #
-        #     for _ in range(len(x_location)):
-        #         plt.scatter(y_location[_], x_location[_], c=colors[labels[x_location[_], y_location[_]]], s=1)
-        #     print(i)
-        # plt.axis('off')
-        # plt.savefig(imagepath + str(subjectid) +'.png', bbox_inches='tight')
-        # plt.close()
-
-        plt.imshow(tensor_to_numpy(h_features[0, 0, :, 70, :]), cmap='gray')
+        plt.figure(1)
+        plt.imshow(tensor_to_numpy(h_features[0, 0, slice, :, :]), cmap='gray')
+        plt.figure(2)
+        plt.imshow(tensor_to_numpy(h_features[0, 0, slice, :, :]), cmap='gray')
         for i in np.unique(template)[1:]:
             x_location, y_location = np.where((template == i))
 
             for _ in range(len(x_location)):
+                plt.figure(1)
                 plt.scatter(y_location[_], x_location[_], c=colors[labels[x_location[_], y_location[_]]], s=1)
-                # plt.scatter(y_location[_], x_location[_], c=colors[i], s=1, alpha=0.5)
+                plt.figure(2)
+                plt.scatter(y_location[_], x_location[_], c=colors[i], s=1, alpha=1)
             print(i)
+
+        plt.figure(1)
         plt.axis('off')
-        plt.savefig(imagepath + str(subjectid) +'.png', bbox_inches='tight')
+        plt.savefig(imagepath + str(subjectid) +'semantic.png', bbox_inches='tight')
+        plt.close()
+
+        plt.figure(2)
+        plt.axis('off')
+        plt.savefig(imagepath + str(subjectid) +'template.png', bbox_inches='tight')
         plt.close()
 
 
