@@ -2,6 +2,7 @@ import warnings
 import numpy as np
 import torch
 from torch.nn.functional import kl_div
+import torch.nn.functional as F
 
 warnings.filterwarnings("ignore")
 image_shape = (176, 144, 144, 1)
@@ -805,3 +806,147 @@ class Variant_Direct(torch.nn.Module):
         Ip1 = self.pet_dec(mr_feature)
 
         return Ip1, mr_d1, mr_d2, mr_c1
+
+
+filters = 2
+class MFCN(torch.nn.Module):
+    def cksn(self, infilters, outfilters, k_size, k_stride, padding_mode = 'same', name = None):
+        module = torch.nn.Sequential()
+        module.add_module(name = name + 'conv3D',
+                          module= torch.nn.Conv3d(in_channels= infilters, out_channels= outfilters, kernel_size= k_size,
+                                                  stride= k_stride, padding=padding_mode))
+        module.add_module(name = name + 'BN', module= torch.nn.BatchNorm3d(num_features= outfilters))
+        module.add_module(name = name + 'activation', module = torch.nn.ReLU())
+        return module
+
+    def __init__(self, number_class):
+        super(MFCN, self).__init__()
+        self.m1 = torch.nn.Sequential(
+            self.cksn(infilters=1, outfilters= 16 * filters, k_size=3, k_stride=1, name= 'm1_1'),
+            self.cksn(infilters=16 * filters, outfilters= 16 * filters, k_size=3, k_stride=1, name='m1_2'),
+            torch.nn.MaxPool3d(2)
+        )
+        self.p1 = torch.nn.Sequential(
+            self.cksn(infilters=1, outfilters= 16 * filters, k_size=3, k_stride=1, name= 'p1_1'),
+            self.cksn(infilters=16 * filters, outfilters= 16 * filters, k_size=3, k_stride=1, name='p1_2'),
+            torch.nn.MaxPool3d(2)
+        )
+        # self.t1 = MKM(inputsize=(1, 16*filters, 88, 72, 72))
+
+        self.m2 = torch.nn.Sequential(
+            DenseBlock(channels= 16 * filters),
+            self.cksn(infilters= 64 * filters, outfilters= 32 * filters, k_size=1, k_stride=1, name='m2_1'),
+            torch.nn.AvgPool3d(2)
+        )
+        self.p2 = torch.nn.Sequential(
+            DenseBlock(channels= 16 * filters),
+            self.cksn(infilters= 64 * filters, outfilters= 32 * filters, k_size=1, k_stride=1, name='p2_1'),
+            torch.nn.AvgPool3d(2)
+        )
+        # self.t2 = MKM(inputsize=(1, 32*filters, 44, 36, 36))
+
+        self.m3 = torch.nn.Sequential(
+            DenseBlock(channels= 32 * filters),
+            self.cksn(infilters= 128 * filters, outfilters= 64 * filters, k_size=1, k_stride=1, name='m3_1'),
+            torch.nn.AvgPool3d(2)
+        )
+        self.p3 = torch.nn.Sequential(
+            DenseBlock(channels= 32 * filters),
+            self.cksn(infilters= 128 * filters, outfilters= 64 * filters, k_size=1, k_stride=1, name='p3_1'),
+            torch.nn.AvgPool3d(2)
+        )
+        self.t3 = MKM(inputsize=(1, 64*filters, 22, 18, 18))
+
+        # self.m4 = DenseBlock(channels= 64 * filters)
+        # self.p4 = DenseBlock(channels= 64 * filters)
+
+        self.c_m = torch.nn.Sequential(
+            self.cksn(infilters= 64 * filters, outfilters= 8 * filters, k_size=3, k_stride=1, name= 'c1'),
+            self.cksn(infilters= 8 * filters, outfilters= 1, k_size=3, k_stride=1, name='c2'),
+            torch.nn.MaxPool3d(2),
+            torch.nn.Flatten(),
+            # torch.nn.Dropout(0.5),
+            torch.nn.Linear(in_features= 891, out_features=number_class),
+            torch.nn.Softmax()
+        )
+        self.c_p = torch.nn.Sequential(
+            self.cksn(infilters= 64 * filters, outfilters= 8 * filters, k_size=3, k_stride=1, name= 'c1'),
+            self.cksn(infilters= 8 * filters, outfilters= 1, k_size=3, k_stride=1, name='c2'),
+            torch.nn.MaxPool3d(2),
+            torch.nn.Flatten(),
+            # torch.nn.Dropout(0.5),
+            torch.nn.Linear(in_features= 891, out_features=number_class),
+            torch.nn.Softmax()
+        )
+
+    def forward(self, mr, pet):
+        mf = self.m1(mr)
+        pf = self.p1(pet)
+
+        mf = self.m2(mf)
+        pf = self.p2(pf)
+
+        mf = self.m3(mf)
+        pf = self.p3(pf)
+        f = self.t3(mf, pf)
+        f = torch.reshape(f, shape=(64 * filters, 1, 3, 3, 3))
+        mf = F.conv3d(mf, f, stride=1, padding='same', groups=64 * filters)
+        pf = F.conv3d(pf, f, stride=1, padding='same', groups=64 * filters)
+
+        mm = self.c_m(mf)
+        mp = self.c_p(mf)
+        pm = self.c_m(pf)
+        pp = self.c_p(pf)
+
+        return mm, mp, pm, pp
+
+class MKM(torch.nn.Module):
+    def cksn(self, infilters, outfilters, k_size, k_stride, padding_mode = 'same', name = None):
+        module = torch.nn.Sequential()
+        module.add_module(name = name + 'conv3D',
+                          module= torch.nn.Conv3d(in_channels= infilters, out_channels= outfilters, kernel_size= k_size,
+                                                  stride= k_stride, padding=padding_mode))
+        module.add_module(name = name + 'BN', module= torch.nn.BatchNorm3d(num_features= outfilters))
+        module.add_module(name = name + 'activation', module = torch.nn.ReLU())
+        return module
+
+    def __init__(self, inputsize):
+        super(MKM, self).__init__()
+        batch, channel, height, width, depth = inputsize
+        self.mlayer = self.cksn(infilters= channel, outfilters= channel, k_size=1, k_stride=1, padding_mode='same', name='mlayer')
+        self.player = self.cksn(infilters= channel, outfilters= channel, k_size=1, k_stride=1, padding_mode='same', name='player')
+        self.flayer = self.cksn(infilters= 2 * channel, outfilters= channel, k_size=(height//2, width//2, depth//2),
+                                k_stride=(height//4, width//4, depth//4), padding_mode='valid', name='flayer')
+
+    def forward(self, mr, pet):
+        mf = self.mlayer(mr)
+        pf = self.player(pet)
+        f = torch.cat((mf, pf), dim=1)
+        kernel = self.flayer(f)
+        return kernel
+
+class DenseBlock(torch.nn.Module):
+
+    def __init__(self, channels):
+        super(DenseBlock, self).__init__()
+        self.l1 = self.cksn(infilters= channels, outfilters= channels, k_size=3, k_stride=1, name='l1')
+        self.l2 = self.cksn(infilters= 2 * channels, outfilters= channels, k_size=3, k_stride=1, name='l2')
+        self.l3 = self.cksn(infilters= 3 * channels, outfilters= channels, k_size=3, k_stride=1, name='l3')
+
+    def cksn(self, infilters, outfilters, k_size, k_stride, name = None):
+        module = torch.nn.Sequential()
+        module.add_module(name = name + 'conv3D',
+                          module= torch.nn.Conv3d(in_channels= infilters, out_channels= outfilters, kernel_size= k_size,
+                                                  stride= k_stride, padding='same'))
+        module.add_module(name = name + 'BN', module= torch.nn.BatchNorm3d(num_features= outfilters))
+        module.add_module(name = name + 'activation', module = torch.nn.ReLU())
+        return module
+
+    def forward(self, f):
+        f1 = self.l1(f)
+        f = torch.cat((f, f1), dim=1)
+        f2 = self.l2(f)
+        f = torch.cat((f, f2), dim=1)
+        f3 = self.l3(f)
+        f = torch.cat((f, f3), dim=1)
+        return f
